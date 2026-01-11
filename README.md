@@ -1,17 +1,38 @@
-# Backend (FastAPI)
+# SMB Supply Chain AI (CSV MVP)
 
-## Run locally
+This MVP takes a single CSV with columns:
+
+Required:
+- SKU
+- Date (supports `1/12/2025` day-first or ISO)
+- UnitsSold
+- OnHand
+- LeadTimeDays
+
+Optional:
+- MOQ
+- Cost
+
+It returns reorder recommendations + a simple dashboard UI.
+
+## Quick start
+### 1) Backend
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Health check:
-- http://localhost:8000/health
+### 2) Frontend
+```bash
+cd ../frontend
+npm install
+npm run dev
+```
 
-API:
-- POST http://localhost:8000/api/recommendations?horizon_days=30
-  - multipart form-data: file=@your.csv
+Then open http://localhost:3000 and upload your CSV.
+
+## Sample CSV
+See `sample.csv` in this repo.

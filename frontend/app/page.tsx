@@ -1,136 +1,150 @@
-"use client";
+import Link from "next/link";
 
-import React, { useState } from "react";
-import { Dashboard, Drawer, Recommendation } from "./components/Dashboard";
-import { OrganizationSwitcher, UserButton, useAuth, useOrganization } from "@clerk/nextjs";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-
-export default function Page() {
-  const { getToken } = useAuth();
-  const { organization } = useOrganization();
-
-  const [file, setFile] = useState<File | null>(null);
-  const [recs, setRecs] = useState<Recommendation[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Recommendation | null>(null);
-
-  async function onRun() {
-    setErr(null);
-
-    if (!organization?.id) {
-      setErr("Please create/select a Company (Organization) first using the switcher in the top right.");
-      return;
-    }
-
-    if (!file) {
-      setErr("Please choose a CSV file first.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const token = await getToken();
-      if (!token) {
-        throw new Error("Unable to get login token. Please sign out and sign in again.");
-      }
-
-      const fd = new FormData();
-      fd.append("file", file);
-
-      const res = await fetch(`${API_BASE}/api/recommendations?horizon_days=30`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Org-Id": organization.id,
-        },
-        body: fd,
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "API error");
-      }
-
-      const data = await res.json();
-      setRecs(data);
-    } catch (e: any) {
-      setErr(e?.message ?? "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  }
-
+export default function Home() {
   return (
-    <main className="space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">SMB Inventory Planner (Secure)</h1>
-          <p className="text-sm text-neutral-600">
-            Upload your CSV and get reorder recommendations. Data is scoped to your company.
-          </p>
-        </div>
+    <main className="min-h-screen bg-white text-neutral-900">
+      {/* Top bar */}
+      <header className="border-b border-neutral-200">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-xl bg-neutral-900" />
+            <span className="text-sm font-semibold">Supply Chain AI</span>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <OrganizationSwitcher />
-          <UserButton />
+          <div className="flex items-center gap-2">
+            <Link
+              href="/sign-in"
+              className="rounded-xl px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-100"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/sign-up"
+              className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800"
+            >
+              Start free trial
+            </Link>
+          </div>
         </div>
       </header>
 
-      <section className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="text-sm font-semibold">1) Upload CSV</div>
-            <div className="text-xs text-neutral-500">
-              Required columns: <span className="font-mono">SKU, Date, UnitsSold, OnHand, LeadTimeDays</span> (MOQ, Cost optional)
+      {/* Hero */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="grid gap-10 md:grid-cols-2 md:items-center">
+          <div>
+            <h1 className="text-4xl font-extrabold tracking-tight md:text-5xl">
+              Stop Guessing Inventory.
+              <span className="text-neutral-500"> Start Planning with AI.</span>
+            </h1>
+
+            <p className="mt-4 text-lg text-neutral-700">
+              AI-powered inventory planning for small manufacturers. Reduce excess
+              stock, avoid stockouts, and protect your cash flow — without ERP
+              complexity.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/sign-up"
+                className="rounded-2xl bg-neutral-900 px-6 py-3 text-center text-sm font-semibold text-white hover:bg-neutral-800"
+              >
+                Upload Your Excel &amp; Get AI Recommendations
+              </Link>
+              <Link
+                href="/app"
+                className="rounded-2xl border border-neutral-300 bg-white px-6 py-3 text-center text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
+              >
+                Go to Dashboard
+              </Link>
             </div>
-            <div className="text-xs text-neutral-500">
-              Date supports: <span className="font-mono">1/12/2025</span> (day-first) or <span className="font-mono">2025-12-01</span>.
+
+            <div className="mt-8 grid grid-cols-3 gap-3 text-xs text-neutral-600">
+              <div className="rounded-xl border border-neutral-200 p-3">
+                <div className="font-semibold text-neutral-900">Minutes</div>
+                <div>Setup time</div>
+              </div>
+              <div className="rounded-xl border border-neutral-200 p-3">
+                <div className="font-semibold text-neutral-900">Cash</div>
+                <div>Focused planning</div>
+              </div>
+              <div className="rounded-xl border border-neutral-200 p-3">
+                <div className="font-semibold text-neutral-900">SME</div>
+                <div>Built for you</div>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="text-sm"
-            />
-            <button
-              onClick={onRun}
-              disabled={!file || loading}
-              className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {loading ? "Running..." : "Generate Recommendations"}
-            </button>
+          {/* Right panel */}
+          <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 shadow-sm">
+            <div className="text-sm font-semibold">What you get</div>
+            <ul className="mt-4 space-y-3 text-sm text-neutral-700">
+              <li className="rounded-xl border border-neutral-200 bg-white p-3">
+                ✅ What to reorder + how much + when
+              </li>
+              <li className="rounded-xl border border-neutral-200 bg-white p-3">
+                ✅ Cash impact before you buy
+              </li>
+              <li className="rounded-xl border border-neutral-200 bg-white p-3">
+                ✅ AI explanations in plain English
+              </li>
+              <li className="rounded-xl border border-neutral-200 bg-white p-3">
+                ✅ Demand spike + stockout risk alerts
+              </li>
+            </ul>
           </div>
         </div>
-
-        <div className="mt-3 text-xs text-neutral-500">
-          Backend: <span className="font-mono">{API_BASE}</span>
-          <span className="mx-2">•</span>
-          Company: <span className="font-mono">{organization?.name ?? "None selected"}</span>
-        </div>
-
-        {err && (
-          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            {err}
-          </div>
-        )}
       </section>
 
-      {recs ? (
-        <>
-          <Dashboard recs={recs} onSelect={(r) => setSelected(r)} />
-          <Drawer selected={selected} onClose={() => setSelected(null)} />
-        </>
-      ) : (
-        <section className="rounded-2xl border border-dashed border-neutral-300 bg-white p-6 text-sm text-neutral-600">
-          Upload a CSV to see your dashboard here.
-        </section>
-      )}
+      {/* Features */}
+      <section className="border-t border-neutral-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-14">
+          <h2 className="text-2xl font-bold">Built for small manufacturers</h2>
+          <p className="mt-2 max-w-3xl text-neutral-700">
+            Traditional ERPs are expensive and complex. We focus on the decisions
+            that save cash and prevent stockouts.
+          </p>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ["AI Reorder Recommendations", "Know exactly what to buy and when — SKU by SKU."],
+              ["Cash Impact View", "See how much money will be locked before you order."],
+              ["AI Explanations", "Every recommendation explained clearly."],
+              ["Seasonality Detection", "Plan ahead for peak demand periods."],
+              ["Supplier Lead Time Support", "Use real lead time to reduce surprises."],
+              ["Multi-Company", "Manage multiple brands/factories with one login."],
+            ].map(([title, desc]) => (
+              <div key={title} className="rounded-3xl border border-neutral-200 p-6 shadow-sm">
+                <div className="text-sm font-semibold">{title}</div>
+                <div className="mt-2 text-sm text-neutral-700">{desc}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-10 flex flex-col items-center justify-between gap-3 rounded-3xl border border-neutral-200 bg-neutral-50 p-8 md:flex-row">
+            <div>
+              <div className="text-xl font-bold">Ready to try with your data?</div>
+              <div className="mt-1 text-sm text-neutral-700">
+                No credit card required. Cancel anytime.
+              </div>
+            </div>
+            <Link
+              href="/sign-up"
+              className="rounded-2xl bg-neutral-900 px-6 py-3 text-sm font-semibold text-white hover:bg-neutral-800"
+            >
+              Start Free Trial
+            </Link>
+          </div>
+
+          <footer className="mt-10 border-t border-neutral-200 pt-6 text-sm text-neutral-600 flex flex-col gap-2 sm:flex-row sm:justify-between">
+            <div>© {new Date().getFullYear()} Supply Chain AI</div>
+            <div className="flex gap-4">
+              <a href="#" className="hover:text-neutral-900">Privacy</a>
+              <a href="#" className="hover:text-neutral-900">Terms</a>
+              <a href="mailto:hello@example.com" className="hover:text-neutral-900">Contact</a>
+            </div>
+          </footer>
+        </div>
+      </section>
     </main>
   );
 }

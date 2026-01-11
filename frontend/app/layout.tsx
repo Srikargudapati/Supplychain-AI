@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata = {
   title: "Supply Chain AI",
-  description: "SMB Inventory Planner",
+  description: "AI-powered inventory planning for small manufacturers",
 };
 
 export default function RootLayout({
@@ -14,11 +14,10 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className="min-h-screen bg-neutral-50 text-neutral-900">
+        <body className="min-h-screen bg-white text-neutral-900">
           {children}
         </body>
       </html>
     </ClerkProvider>
   );
 }
-

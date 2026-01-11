@@ -2,10 +2,14 @@
 
 import React, { useState } from "react";
 import { Dashboard, Drawer, Recommendation } from "./components/Dashboard";
+import { OrganizationSwitcher, UserButton, useAuth, useOrganization } from "@clerk/nextjs";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export default function Page() {
+  const { getToken } = useAuth();
+  const { organization } = useOrganization();
+
   const [file, setFile] = useState<File | null>(null);
   const [recs, setRecs] = useState<Recommendation[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -13,20 +17,43 @@ export default function Page() {
   const [selected, setSelected] = useState<Recommendation | null>(null);
 
   async function onRun() {
-    if (!file) return;
-    setLoading(true);
     setErr(null);
+
+    if (!organization?.id) {
+      setErr("Please create/select a Company (Organization) first using the switcher in the top right.");
+      return;
+    }
+
+    if (!file) {
+      setErr("Please choose a CSV file first.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Unable to get login token. Please sign out and sign in again.");
+      }
+
       const fd = new FormData();
       fd.append("file", file);
+
       const res = await fetch(`${API_BASE}/api/recommendations?horizon_days=30`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Org-Id": organization.id,
+        },
         body: fd,
       });
+
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || "API error");
       }
+
       const data = await res.json();
       setRecs(data);
     } catch (e: any) {
@@ -38,15 +65,17 @@ export default function Page() {
 
   return (
     <main className="space-y-6">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">SMB Inventory Planner (CSV MVP)</h1>
+          <h1 className="text-2xl font-bold">SMB Inventory Planner (Secure)</h1>
           <p className="text-sm text-neutral-600">
-            Upload your CSV (SKU, Date, UnitsSold, OnHand, LeadTimeDays, MOQ, Cost) and get reorder recommendations.
+            Upload your CSV and get reorder recommendations. Data is scoped to your company.
           </p>
         </div>
-        <div className="text-xs text-neutral-500">
-          Backend: <span className="font-mono">{API_BASE}</span>
+
+        <div className="flex items-center gap-3">
+          <OrganizationSwitcher />
+          <UserButton />
         </div>
       </header>
 
@@ -55,7 +84,10 @@ export default function Page() {
           <div className="space-y-1">
             <div className="text-sm font-semibold">1) Upload CSV</div>
             <div className="text-xs text-neutral-500">
-              Date formats supported: <span className="font-mono">1/12/2025</span> (day-first) or <span className="font-mono">2025-12-01</span>.
+              Required columns: <span className="font-mono">SKU, Date, UnitsSold, OnHand, LeadTimeDays</span> (MOQ, Cost optional)
+            </div>
+            <div className="text-xs text-neutral-500">
+              Date supports: <span className="font-mono">1/12/2025</span> (day-first) or <span className="font-mono">2025-12-01</span>.
             </div>
           </div>
 
@@ -74,6 +106,12 @@ export default function Page() {
               {loading ? "Running..." : "Generate Recommendations"}
             </button>
           </div>
+        </div>
+
+        <div className="mt-3 text-xs text-neutral-500">
+          Backend: <span className="font-mono">{API_BASE}</span>
+          <span className="mx-2">•</span>
+          Company: <span className="font-mono">{organization?.name ?? "None selected"}</span>
         </div>
 
         {err && (

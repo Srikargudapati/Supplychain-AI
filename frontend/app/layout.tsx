@@ -1,18 +1,24 @@
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs";
 
 export const metadata = {
-  title: "SMB Inventory Planner",
-  description: "CSV → reorder recommendations",
+  title: "Supply Chain AI",
+  description: "SMB Inventory Planner",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-neutral-50 text-neutral-900">
-        <div className="mx-auto max-w-6xl px-4 py-8">
+    <ClerkProvider>
+      <html lang="en">
+        <body className="min-h-screen bg-neutral-50 text-neutral-900">
           {children}
-        </div>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
+

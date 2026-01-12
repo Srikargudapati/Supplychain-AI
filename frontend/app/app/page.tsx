@@ -6,94 +6,18 @@ import {
   useAuth,
   useOrganization,
 } from "@clerk/nextjs";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 /* ===================== TYPES ===================== */
 type Recommendation = {
   sku: string;
-  current_stock: number;
-  avg_daily_sales: number;
   forecast_30d: number;
   reorder_qty: number;
-  reorder_by: string | null;
   status: "RED" | "AMBER" | "GREEN" | string;
   reason: string;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
-
-/* ===================== AI SUMMARY CARD ===================== */
-function AISummaryCard({ recs }: { recs: Recommendation[] }) {
-  const totalForecast = recs.reduce((s, r) => s + r.forecast_30d, 0);
-  const totalReorder = recs.reduce((s, r) => s + r.reorder_qty, 0);
-
-  const red = recs.filter((r) => r.status === "RED");
-  const amber = recs.filter((r) => r.status === "AMBER");
-  const green = recs.filter((r) => r.status === "GREEN");
-
-  return (
-    <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-sky-600 p-6 text-white shadow-xl">
-      <div className="flex flex-col gap-4 md:flex-row md:justify-between">
-        <div>
-          <div className="inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
-            🧠 AI Summary
-          </div>
-          <h2 className="mt-3 text-xl font-extrabold">
-            What needs your attention
-          </h2>
-          <p className="mt-2 text-sm text-white/90">
-            You have{" "}
-            <span className="font-extrabold">{red.length}</span> high-risk SKUs
-            and{" "}
-            <span className="font-extrabold">{amber.length}</span> medium-risk
-            SKUs. Total 30-day demand forecast is{" "}
-            <span className="font-extrabold">
-              {Math.round(totalForecast)}
-            </span>{" "}
-            units with a recommended reorder of{" "}
-            <span className="font-extrabold">
-              {Math.round(totalReorder)}
-            </span>{" "}
-            units.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="rounded-2xl bg-white/15 p-4">
-            <div className="text-xs">RED</div>
-            <div className="text-2xl font-extrabold">{red.length}</div>
-          </div>
-          <div className="rounded-2xl bg-white/15 p-4">
-            <div className="text-xs">AMBER</div>
-            <div className="text-2xl font-extrabold">{amber.length}</div>
-          </div>
-          <div className="rounded-2xl bg-white/15 p-4">
-            <div className="text-xs">GREEN</div>
-            <div className="text-2xl font-extrabold">{green.length}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ===================== SIMPLE FORECAST CHART ===================== */
-function ForecastChart({ value }: { value: number }) {
-  const points = [10, 20, 30, value / 2, value].map(
-    (v, i) => `${i * 60},${140 - Math.min(v, 140)}`
-  );
-
-  return (
-    <svg viewBox="0 0 260 150" className="w-full h-36">
-      <polyline
-        fill="none"
-        stroke="#6366f1"
-        strokeWidth="4"
-        points={points.join(" ")}
-      />
-    </svg>
-  );
-}
 
 /* ===================== DASHBOARD ===================== */
 export default function Dashboard() {
@@ -104,6 +28,15 @@ export default function Dashboard() {
   const [recs, setRecs] = useState<Recommendation[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /* FILTER STATES */
+  const [riskFilter, setRiskFilter] = useState<
+    "ALL" | "RED" | "AMBER" | "GREEN"
+  >("ALL");
+  const [actionFilter, setActionFilter] = useState<
+    "ALL" | "REORDER" | "NO_REORDER"
+  >("ALL");
+  const [search, setSearch] = useState("");
 
   async function runAI() {
     setError(null);
@@ -138,18 +71,27 @@ export default function Dashboard() {
     }
   }
 
-  const totalForecast =
-    recs?.reduce((s, r) => s + r.forecast_30d, 0) || 0;
-  const totalReorder =
-    recs?.reduce((s, r) => s + r.reorder_qty, 0) || 0;
+  /* ===================== FILTER LOGIC ===================== */
+  const filteredRecs = useMemo(() => {
+    if (!recs) return [];
+
+    return recs.filter((r) => {
+      if (riskFilter !== "ALL" && r.status !== riskFilter) return false;
+      if (actionFilter === "REORDER" && r.reorder_qty <= 0) return false;
+      if (actionFilter === "NO_REORDER" && r.reorder_qty > 0) return false;
+      if (search && !r.sku.toLowerCase().includes(search.toLowerCase()))
+        return false;
+      return true;
+    });
+  }, [recs, riskFilter, actionFilter, search]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-sky-50">
+    <main className="min-h-screen bg-neutral-50">
       {/* Header */}
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <h1 className="text-xl font-extrabold text-indigo-700">
-            Supply Chain AI Dashboard
+          <h1 className="text-xl font-bold text-indigo-700">
+            AI Inventory Dashboard
           </h1>
           <div className="flex gap-3">
             <OrganizationSwitcher />
@@ -159,10 +101,9 @@ export default function Dashboard() {
       </header>
 
       {/* Upload */}
-      <section className="mx-auto max-w-6xl px-6 py-8">
-        <div className="rounded-3xl bg-white p-6 shadow-lg">
-          <h2 className="font-bold">Upload inventory data</h2>
-          <div className="mt-4 flex gap-3">
+      <section className="mx-auto max-w-6xl px-6 py-6">
+        <div className="rounded-3xl bg-white p-6 shadow">
+          <div className="flex flex-wrap gap-3 items-center">
             <input
               type="file"
               accept=".csv"
@@ -171,7 +112,7 @@ export default function Dashboard() {
             <button
               onClick={runAI}
               disabled={loading}
-              className="rounded-xl bg-indigo-600 px-6 py-2 text-sm font-semibold text-white"
+              className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white"
             >
               {loading ? "Running AI..." : "Run AI"}
             </button>
@@ -185,84 +126,115 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* RESULTS */}
+      {/* FILTER BAR */}
       {recs && (
-        <>
-          {/* 🟦 STEP 2 — AI SUMMARY CARD */}
-          <section className="mx-auto max-w-6xl px-6">
-            <AISummaryCard recs={recs} />
-          </section>
-
-          {/* KPI CARDS */}
-          <section className="mx-auto max-w-6xl px-6 py-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl bg-emerald-600 p-5 text-white shadow-lg">
-              <div className="text-sm">30-Day Forecast</div>
-              <div className="text-3xl font-extrabold">
-                {Math.round(totalForecast)}
+        <section className="mx-auto max-w-6xl px-6">
+          <div className="rounded-3xl bg-white p-5 shadow mb-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              {/* Risk filter */}
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { key: "ALL", label: "All" },
+                  { key: "RED", label: "🔴 Urgent" },
+                  { key: "AMBER", label: "🟡 Watch" },
+                  { key: "GREEN", label: "🟢 Safe" },
+                ].map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => setRiskFilter(f.key as any)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                      riskFilter === f.key
+                        ? "bg-indigo-600 text-white"
+                        : "bg-neutral-100 text-neutral-700"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
-            </div>
 
-            <div className="rounded-2xl bg-indigo-600 p-5 text-white shadow-lg">
-              <div className="text-sm">Recommended Reorder</div>
-              <div className="text-3xl font-extrabold">
-                {Math.round(totalReorder)}
+              {/* Action filter */}
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { key: "ALL", label: "All actions" },
+                  { key: "REORDER", label: "🛒 Needs reorder" },
+                  { key: "NO_REORDER", label: "⏸ No reorder" },
+                ].map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => setActionFilter(f.key as any)}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                      actionFilter === f.key
+                        ? "bg-emerald-600 text-white"
+                        : "bg-neutral-100 text-neutral-700"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
-            </div>
-          </section>
 
-          {/* FORECAST CHART */}
-          <section className="mx-auto max-w-6xl px-6">
-            <div className="rounded-3xl bg-white p-6 shadow-lg">
-              <h3 className="font-bold mb-3">Auto Demand Forecast</h3>
-              <ForecastChart value={totalForecast} />
+              {/* Search */}
+              <input
+                type="text"
+                placeholder="Search SKU…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="rounded-xl border px-4 py-2 text-sm"
+              />
             </div>
-          </section>
 
-          {/* TABLE */}
-          <section className="mx-auto max-w-6xl px-6 py-8">
-            <div className="rounded-3xl bg-white p-6 shadow-lg overflow-x-auto">
-              <h3 className="font-bold mb-4">SKU Recommendations</h3>
-              <table className="w-full text-sm">
-                <thead className="border-b text-neutral-600">
-                  <tr>
-                    <th>Status</th>
-                    <th>SKU</th>
-                    <th>Forecast</th>
-                    <th>Reorder</th>
-                    <th>Reason</th>
+            <div className="mt-3 text-xs text-neutral-600">
+              Showing <b>{filteredRecs.length}</b> of <b>{recs.length}</b> SKUs
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* TABLE */}
+      {recs && (
+        <section className="mx-auto max-w-6xl px-6 pb-12">
+          <div className="rounded-3xl bg-white p-6 shadow overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b text-neutral-600">
+                <tr>
+                  <th>Status</th>
+                  <th>SKU</th>
+                  <th>Forecast</th>
+                  <th>Reorder</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecs.map((r) => (
+                  <tr key={r.sku} className="border-b">
+                    <td className="py-2">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          r.status === "RED"
+                            ? "bg-red-100 text-red-700"
+                            : r.status === "AMBER"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-green-100 text-green-700"
+                        }`}
+                      >
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="font-mono">{r.sku}</td>
+                    <td>{Math.round(r.forecast_30d)}</td>
+                    <td className="font-semibold">
+                      {Math.round(r.reorder_qty)}
+                    </td>
+                    <td className="max-w-md text-neutral-600">
+                      {r.reason}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {recs.map((r) => (
-                    <tr key={r.sku} className="border-b">
-                      <td className="py-2">
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            r.status === "RED"
-                              ? "bg-red-100 text-red-700"
-                              : r.status === "AMBER"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-green-100 text-green-700"
-                          }`}
-                        >
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="font-mono">{r.sku}</td>
-                      <td>{Math.round(r.forecast_30d)}</td>
-                      <td className="font-semibold">
-                        {Math.round(r.reorder_qty)}
-                      </td>
-                      <td className="text-neutral-600 max-w-md">
-                        {r.reason}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </main>
   );

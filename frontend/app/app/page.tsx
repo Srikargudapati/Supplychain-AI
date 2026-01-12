@@ -6,7 +6,7 @@ import {
   useAuth,
   useOrganization,
 } from "@clerk/nextjs";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 
 /* ===================== TYPES ===================== */
 type Recommendation = {
@@ -19,6 +19,94 @@ type Recommendation = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
 
+/* ===================== SIMPLE AI REASON ===================== */
+function simpleReason(r: Recommendation) {
+  if (r.status === "RED")
+    return "Urgent reorder needed to avoid stockout.";
+  if (r.status === "AMBER")
+    return "Reorder soon to stay within safe stock levels.";
+  return "Stock level is healthy.";
+}
+
+/* ===================== PURCHASE ORDER PANEL ===================== */
+function PurchaseOrderPanel({
+  items,
+  onClose,
+}: {
+  items: Recommendation[];
+  onClose: () => void;
+}) {
+  if (items.length === 0) return null;
+
+  const totalQty = items.reduce((s, i) => s + i.reorder_qty, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+
+      <div className="relative w-full max-w-lg bg-white p-6 shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-neutral-500"
+        >
+          ✕
+        </button>
+
+        <h2 className="text-xl font-extrabold text-indigo-700">
+          Purchase Order Preview
+        </h2>
+
+        <p className="mt-1 text-sm text-neutral-600">
+          Review items before sending to supplier
+        </p>
+
+        <div className="mt-6 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b text-neutral-600">
+              <tr>
+                <th className="text-left">SKU</th>
+                <th>Qty</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i) => (
+                <tr key={i.sku} className="border-b">
+                  <td className="py-2 font-mono">{i.sku}</td>
+                  <td className="text-center font-semibold">
+                    {Math.round(i.reorder_qty)}
+                  </td>
+                  <td className="text-neutral-600">
+                    {simpleReason(i)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-indigo-50 p-4">
+          <div className="text-sm font-semibold text-indigo-700">
+            Total Units to Order
+          </div>
+          <div className="text-2xl font-extrabold text-indigo-800">
+            {Math.round(totalQty)}
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          <button className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white">
+            Download PO (CSV)
+          </button>
+          <button className="flex-1 rounded-xl border px-4 py-3 text-sm font-semibold">
+            Send to Supplier
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ===================== DASHBOARD ===================== */
 export default function Dashboard() {
   const { getToken } = useAuth();
@@ -29,22 +117,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* FILTER STATES */
-  const [riskFilter, setRiskFilter] = useState<
-    "ALL" | "RED" | "AMBER" | "GREEN"
-  >("ALL");
-  const [actionFilter, setActionFilter] = useState<
-    "ALL" | "REORDER" | "NO_REORDER"
-  >("ALL");
-  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [showPO, setShowPO] = useState(false);
 
   async function runAI() {
     setError(null);
     setRecs(null);
+    setSelected({});
 
     if (!file) return setError("Please upload a CSV file");
     if (!organization?.id)
-      return setError("Please select a company (Organization)");
+      return setError("Please select a company");
 
     setLoading(true);
 
@@ -71,19 +154,8 @@ export default function Dashboard() {
     }
   }
 
-  /* ===================== FILTER LOGIC ===================== */
-  const filteredRecs = useMemo(() => {
-    if (!recs) return [];
-
-    return recs.filter((r) => {
-      if (riskFilter !== "ALL" && r.status !== riskFilter) return false;
-      if (actionFilter === "REORDER" && r.reorder_qty <= 0) return false;
-      if (actionFilter === "NO_REORDER" && r.reorder_qty > 0) return false;
-      if (search && !r.sku.toLowerCase().includes(search.toLowerCase()))
-        return false;
-      return true;
-    });
-  }, [recs, riskFilter, actionFilter, search]);
+  const selectedItems =
+    recs?.filter((r) => selected[r.sku] && r.reorder_qty > 0) || [];
 
   return (
     <main className="min-h-screen bg-neutral-50">
@@ -103,7 +175,7 @@ export default function Dashboard() {
       {/* Upload */}
       <section className="mx-auto max-w-6xl px-6 py-6">
         <div className="rounded-3xl bg-white p-6 shadow">
-          <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex gap-3 items-center">
             <input
               type="file"
               accept=".csv"
@@ -126,89 +198,49 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* FILTER BAR */}
-      {recs && (
-        <section className="mx-auto max-w-6xl px-6">
-          <div className="rounded-3xl bg-white p-5 shadow mb-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              {/* Risk filter */}
-              <div className="flex gap-2 flex-wrap">
-                {[
-                  { key: "ALL", label: "All" },
-                  { key: "RED", label: "🔴 Urgent" },
-                  { key: "AMBER", label: "🟡 Watch" },
-                  { key: "GREEN", label: "🟢 Safe" },
-                ].map((f) => (
-                  <button
-                    key={f.key}
-                    onClick={() => setRiskFilter(f.key as any)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                      riskFilter === f.key
-                        ? "bg-indigo-600 text-white"
-                        : "bg-neutral-100 text-neutral-700"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Action filter */}
-              <div className="flex gap-2 flex-wrap">
-                {[
-                  { key: "ALL", label: "All actions" },
-                  { key: "REORDER", label: "🛒 Needs reorder" },
-                  { key: "NO_REORDER", label: "⏸ No reorder" },
-                ].map((f) => (
-                  <button
-                    key={f.key}
-                    onClick={() => setActionFilter(f.key as any)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                      actionFilter === f.key
-                        ? "bg-emerald-600 text-white"
-                        : "bg-neutral-100 text-neutral-700"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Search */}
-              <input
-                type="text"
-                placeholder="Search SKU…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="rounded-xl border px-4 py-2 text-sm"
-              />
-            </div>
-
-            <div className="mt-3 text-xs text-neutral-600">
-              Showing <b>{filteredRecs.length}</b> of <b>{recs.length}</b> SKUs
-            </div>
-          </div>
-        </section>
-      )}
-
       {/* TABLE */}
       {recs && (
         <section className="mx-auto max-w-6xl px-6 pb-12">
           <div className="rounded-3xl bg-white p-6 shadow overflow-x-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="font-bold">SKU Recommendations</h3>
+              <button
+                onClick={() => setShowPO(true)}
+                disabled={selectedItems.length === 0}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Generate Purchase Order ({selectedItems.length})
+              </button>
+            </div>
+
             <table className="w-full text-sm">
               <thead className="border-b text-neutral-600">
                 <tr>
+                  <th></th>
                   <th>Status</th>
                   <th>SKU</th>
                   <th>Forecast</th>
                   <th>Reorder</th>
-                  <th>Reason</th>
+                  <th>AI Reason</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRecs.map((r) => (
+                {recs.map((r) => (
                   <tr key={r.sku} className="border-b">
-                    <td className="py-2">
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={!!selected[r.sku]}
+                        disabled={r.reorder_qty <= 0}
+                        onChange={() =>
+                          setSelected((prev) => ({
+                            ...prev,
+                            [r.sku]: !prev[r.sku],
+                          }))
+                        }
+                      />
+                    </td>
+                    <td>
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-semibold ${
                           r.status === "RED"
@@ -226,8 +258,8 @@ export default function Dashboard() {
                     <td className="font-semibold">
                       {Math.round(r.reorder_qty)}
                     </td>
-                    <td className="max-w-md text-neutral-600">
-                      {r.reason}
+                    <td className="text-neutral-600">
+                      {simpleReason(r)}
                     </td>
                   </tr>
                 ))}
@@ -235,6 +267,14 @@ export default function Dashboard() {
             </table>
           </div>
         </section>
+      )}
+
+      {/* PO PANEL */}
+      {showPO && (
+        <PurchaseOrderPanel
+          items={selectedItems}
+          onClose={() => setShowPO(false)}
+        />
       )}
     </main>
   );

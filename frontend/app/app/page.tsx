@@ -1,45 +1,121 @@
-"use client";
+function AISummaryCard({ recs }: { recs: Recommendation[] }) {
+  const totalForecast = recs.reduce((s, r) => s + (r.forecast_30d || 0), 0);
+  const totalReorder = recs.reduce((s, r) => s + (r.reorder_qty || 0), 0);
 
-import {
-  OrganizationSwitcher,
-  UserButton,
-  useAuth,
-  useOrganization,
-} from "@clerk/nextjs";
-import React, { useState } from "react";
+  const red = recs.filter((r) => r.status === "RED");
+  const amber = recs.filter((r) => r.status === "AMBER");
+  const green = recs.filter((r) => r.status === "GREEN");
 
-type Recommendation = {
-  sku: string;
-  current_stock: number;
-  avg_daily_sales: number;
-  forecast_30d: number;
-  reorder_qty: number;
-  reorder_by: string | null;
-  status: "RED" | "AMBER" | "GREEN" | string;
-  reason: string;
-};
+  const topReorder = [...recs]
+    .sort((a, b) => (b.reorder_qty || 0) - (a.reorder_qty || 0))
+    .slice(0, 3)
+    .filter((r) => (r.reorder_qty || 0) > 0);
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
-
-/* ---------- Simple SVG Line Chart ---------- */
-function ForecastChart({ value }: { value: number }) {
-  const points = [10, 14, 18, 22, 26, value / 2, value].map(
-    (v, i) => `${i * 40},${120 - Math.min(v, 120)}`
-  );
+  const topRisk = [...red, ...amber].slice(0, 3);
 
   return (
-    <svg viewBox="0 0 260 130" className="w-full h-32">
-      <polyline
-        fill="none"
-        stroke="#6366f1"
-        strokeWidth="3"
-        points={points.join(" ")}
-      />
-      <circle cx="240" cy={120 - Math.min(value, 120)} r="4" fill="#6366f1" />
-    </svg>
+    <div className="rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-600 via-indigo-600 to-sky-600 p-6 text-white shadow-lg">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
+            🧠 AI Summary
+          </div>
+          <h3 className="mt-3 text-xl font-extrabold">
+            What to do next (based on your upload)
+          </h3>
+          <p className="mt-2 text-sm text-white/90 leading-relaxed">
+            You have{" "}
+            <span className="font-extrabold">{red.length}</span> high-risk SKU(s){" "}
+            and <span className="font-extrabold">{amber.length}</span> medium-risk
+            SKU(s). Total 30-day demand forecast is{" "}
+            <span className="font-extrabold">{Math.round(totalForecast)}</span>{" "}
+            units and recommended reorder is{" "}
+            <span className="font-extrabold">{Math.round(totalReorder)}</span>{" "}
+            units.
+          </p>
+        </div>
+
+        <div className="hidden sm:grid gap-2 text-right">
+          <div className="rounded-2xl bg-white/10 px-4 py-3">
+            <div className="text-xs text-white/80">High risk</div>
+            <div className="text-2xl font-extrabold">{red.length}</div>
+          </div>
+          <div className="rounded-2xl bg-white/10 px-4 py-3">
+            <div className="text-xs text-white/80">Medium risk</div>
+            <div className="text-2xl font-extrabold">{amber.length}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div className="rounded-3xl bg-white/10 p-5">
+          <div className="text-sm font-bold">✅ Top Actions</div>
+          <ul className="mt-3 space-y-2 text-sm text-white/95">
+            {topRisk.length === 0 && topReorder.length === 0 ? (
+              <li className="text-white/85">
+                No urgent actions found. Inventory looks stable.
+              </li>
+            ) : (
+              <>
+                {topRisk.map((r) => (
+                  <li key={`risk-${r.sku}`} className="flex gap-2">
+                    <span className="mt-[2px]">⚠️</span>
+                    <span>
+                      <span className="font-mono font-semibold">{r.sku}</span>:{" "}
+                      {r.status === "RED"
+                        ? "Order now to avoid stockout."
+                        : "Order soon to stay safe."}{" "}
+                      {r.reorder_by ? (
+                        <span className="text-white/85">
+                          (By {r.reorder_by})
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+                {topReorder.map((r) => (
+                  <li key={`reorder-${r.sku}`} className="flex gap-2">
+                    <span className="mt-[2px]">🛒</span>
+                    <span>
+                      <span className="font-mono font-semibold">{r.sku}</span>:
+                      reorder{" "}
+                      <span className="font-extrabold">
+                        {Math.round(r.reorder_qty || 0)}
+                      </span>{" "}
+                      units.
+                    </span>
+                  </li>
+                ))}
+              </>
+            )}
+          </ul>
+        </div>
+
+        <div className="rounded-3xl bg-white/10 p-5">
+          <div className="text-sm font-bold">📊 Health Snapshot</div>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-white/10 p-3">
+              <div className="text-xs text-white/80">RED</div>
+              <div className="text-xl font-extrabold">{red.length}</div>
+            </div>
+            <div className="rounded-2xl bg-white/10 p-3">
+              <div className="text-xs text-white/80">AMBER</div>
+              <div className="text-xl font-extrabold">{amber.length}</div>
+            </div>
+            <div className="rounded-2xl bg-white/10 p-3">
+              <div className="text-xs text-white/80">GREEN</div>
+              <div className="text-xl font-extrabold">{green.length}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 text-xs text-white/85">
+            Tip: Focus first on RED SKUs (stockout risk within lead time), then AMBER.
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
-
 export default function Dashboard() {
   const { getToken } = useAuth();
   const { organization } = useOrganization();
